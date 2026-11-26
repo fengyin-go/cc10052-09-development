@@ -70,3 +70,23 @@ body { margin: 0; background: #f6f8fb; color: #1f2937; }
 .analysis-chart { display: flex; align-items: flex-end; gap: 8px; height: 160px; padding: 12px 0; }
 .analysis-bar { flex: 1; border-radius: 4px 4px 0 0; background: var(--brand); min-width: 24px; position: relative; transition: height 0.4s; }
 .analysis-bar span { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+/* 归档复算控制台 */
+.archive-console .archive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.archive-console .panel { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.archive-console .panel h3 { margin: 0 0 8px; font-size: 15px; }
+.archive-console .panel-tip { font-size: 12px; color: var(--muted); margin: 4px 0; }
+.archive-console .inline-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+.archive-console .status-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.archive-console .status-tag.ok { background: #dcfce7; color: #15803d; }
+.archive-console .status-tag.bad { background: #fee2e2; color: #b42318; }
+.archive-console .status-tag.pending { background: #fef9c3; color: #a16207; }
+.archive-console .issue-list { margin: 0; padding-left: 16px; }
+.archive-console .issue.bad { color: #b42318; font-size: 12px; }
+.archive-console .ok { color: #15803d; font-size: 12px; }
+.archive-console .file-details { margin-top: 8px; font-size: 12px; }
+.archive-console .data-table.compact th, .archive-console .data-table.compact td { padding: 5px 8px; font-size: 12px; }
+.archive-console .evidence-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; font-size: 12px; }
+.archive-console .sample-chip { display: inline-block; background: #f1f5f9; border-radius: 6px; padding: 2px 8px; margin: 2px 4px 2px 0; }
+.archive-console .audit-detail { max-width: 320px; color: var(--muted); }
+.archive-console .info-text { color: #15803d; }
+@media (max-width: 1100px) { .archive-console .archive-grid { grid-template-columns: 1fr; } }

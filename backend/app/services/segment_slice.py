@@ -24,13 +24,34 @@ class SegmentSliceService(BaseModuleService):
 
     # ---- 业务扩展：维度切片与差异计算 ----
 
+    def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
+        """切片动作分派：开始计算走领域 run_slice，归档恢复维度经证据网关复算。"""
+        if action == "开始计算":
+            result = self.run_slice(entry_id)
+            if not result.get("ok"):
+                return None, str(result.get("message", "切片计算失败"))
+            return store.find(self.MODULE, entry_id), str(result.get("message", "切片已计算"))
+        if action == "重试计算":
+            result = self.retry_failed(entry_id)
+            if not result.get("ok"):
+                return None, str(result.get("message", "仅计算失败切片可重试"))
+            return store.find(self.MODULE, entry_id), str(result.get("message", "切片已回到待计算"))
+        return super().run_action(entry_id, action)
+
     def run_slice(self, entry_id: int) -> dict[str, Any]:
-        """执行切片计算：按维度聚合分组差异并写回结果。"""
+        """执行切片计算：按维度聚合分组差异并写回结果。
+
+        归档恢复维度必须按归档号关联已校验的归档文件，取回冻结检验数据复算，
+        保证恢复后得到与归档同样区间、同样本量的切片结果；证据失效或复算包
+        不完整时拒绝计算，避免半包进入恢复计算。
+        """
         entry = store.find(self.MODULE, entry_id)
-        if entry is None or entry.get("status") != "待计算":
+        if entry is None or entry.get("status") not in ("待计算",):
             return {"ok": False, "message": "仅待计算切片可执行"}
-        exp_code = str(entry.get("实验编码", ""))
         dimension = str(entry.get("切片维度", ""))
+        if dimension == "归档恢复":
+            return self._run_archive_recovery_slice(entry)
+        exp_code = str(entry.get("实验编码", ""))
         assign_rows = [
             r for r in store.rows("variant_assign")
             if r.get("实验编码") == exp_code and r.get("status") != "已剔除"
@@ -40,7 +61,7 @@ class SegmentSliceService(BaseModuleService):
             entry["abnormal"] = True
             entry["失败原因"] = "无分组数据可切片"
             return {"ok": False, "message": "实验无分组数据，切片计算失败"}
-        if dimension not in ("分组", "人群", "归档恢复"):
+        if dimension not in ("分组", "人群"):
             entry["status"] = "计算失败"
             entry["abnormal"] = True
             entry["失败原因"] = f"不支持的切片维度 {dimension}"
@@ -53,6 +74,40 @@ class SegmentSliceService(BaseModuleService):
         entry["pending"] = False
         entry["计算时间"] = datetime.now(timezone.utc).isoformat()
         return {"ok": True, "message": f"切片 {entry.get('切片值', dimension)} 差异 {diff} 已计算"}
+
+    def _run_archive_recovery_slice(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """归档恢复切片：以归档号取冻结证据复算，而不是读取在线分组明细。"""
+        from app.services.archive_recovery import archive_recovery_service
+
+        archive_no = str(entry.get("归档号", ""))
+        if not archive_no:
+            entry["status"] = "计算失败"
+            entry["abnormal"] = True
+            entry["失败原因"] = "切片未引用归档号，无法关联归档证据"
+            return {"ok": False, "message": "归档恢复切片缺少归档号，拒绝计算"}
+        check = archive_recovery_service.check_recovery_evidence(archive_no)
+        if not check.get("ok"):
+            entry["status"] = "计算失败"
+            entry["abnormal"] = True
+            entry["失败原因"] = str(check.get("message", "归档证据不可用"))
+            return {"ok": False, "message": f"归档证据核查失败：{check.get('message', '')}"}
+        evidence = archive_recovery_service.find_evidence(int(check["证据id"]))
+        results = archive_recovery_service._recompute_from_evidence(evidence)
+        entry["分组差异"] = str(results[-1]["组间差异"]) if results else ""
+        entry["数据窗口"] = evidence.get("数据窗口", "")
+        entry["样本量"] = str(check.get("样本量", {}))
+        entry["引用证据id"] = evidence.get("id")
+        entry["status"] = "已计算"
+        entry["pending"] = False
+        entry["abnormal"] = False
+        entry["计算时间"] = datetime.now(timezone.utc).isoformat()
+        return {
+            "ok": True,
+            "message": (
+                f"归档恢复切片按 {archive_no} 冻结证据复算完成，"
+                f"区间 {evidence.get('数据窗口', '')}，样本量 {check.get('样本量', {})}"
+            ),
+        }
 
     def retry_failed(self, entry_id: int) -> dict[str, Any]:
         """重试失败切片：修复失败原因后回到待计算。"""
